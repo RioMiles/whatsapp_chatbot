@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WhatsApp Bot Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: #f5f6fa;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            background: white;
+            padding: 1.5rem;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        h1 {
+            color: #2d3436;
+            font-size: 1.8rem;
+        }
+
+        .logout {
+            background: #ff7675;
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border-radius: 10px;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
+
+        .logout:hover {
+            background: #d63031;
+        }
+
+        .status {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 15px;
+            margin-bottom: 2rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            font-size: 1.1rem;
+        }
+
+        .status.connected {
+            border-left: 5px solid #00b894;
+            color: #00b894;
+        }
+
+        .status.disconnected {
+            border-left: 5px solid #ff7675;
+            color: #ff7675;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .button {
+            padding: 1rem;
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            text-align: center;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .button.start {
+            background: #00b894;
+        }
+
+        .button.stop {
+            background: #ff7675;
+        }
+
+        .button.reset {
+            background: #0984e3;
+        }
+
+        .qr-code {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .qr-code img {
+            max-width: 300px;
+            height: auto;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .appointments-section {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 15px;
+            margin-top: 2rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .appointments-header {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .appointments-header h2 {
+            color: #2d3436;
+            font-size: 1.5rem;
+        }
+
+        .filters {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-input {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .filter-button {
+            background: #00b894;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .filter-button:hover {
+            background: #00a884;
+        }
+
+        .appointment-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid #00b894;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .appointment-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .appointment-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2d3436;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .detail-label {
+            font-size: 0.9rem;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .detail-value {
+            font-size: 1rem;
+            color: #2d3436;
+            font-weight: 500;
+        }
+
+        .appointment-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+
+        .appointment-status.active {
+            background: #00b89415;
+            color: #00b894;
+        }
+
+        .appointment-status.canceled {
+            background: #ff767515;
+            color: #ff7675;
+        }
+
+        .appointment-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+
+        .appointment-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .appointment-detail {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .cancel-link {
+            color: #ff7675;
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: color 0.3s ease;
+        }
+
+        .cancel-link:hover {
+            color: #d63031;
+            text-decoration: underline;
+        }
+
+        .appointments-list.loading {
+            position: relative;
+            min-height: 200px;
+        }
+
+        .appointments-list.loading::after {
+            content: "Loading appointments...";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .no-appointments {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .appointment-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .action-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0.3rem;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .action-button:hover {
+            background-color: #f0f0f0;
+        }
+
+        .delete-btn:hover {
+            background-color: #ffe5e5;
+        }
+
+        .download-btn:hover {
+            background-color: #e5f6ff;
+        }
+
+        .download-all-btn {
+            background: #00b894;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .download-all-btn:hover {
+            background: #00a884;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="dashboard-header">
+            <h1>WhatsApp Bot Dashboard</h1>
+            <a href="{{ url_for('logout') }}" class="logout">Logout</a>
+        </div>
+        
+        <div id="status" class="status disconnected fade-in">
+            Bot Status: Disconnected
+        </div>
+
+        <div class="controls fade-in">
+            <button onclick="startBot()" class="button start">Start Bot</button>
+            <button onclick="resetBot()" class="button reset">Reset Bot</button>
+        </div>
+
+        <div id="qr-code" class="qr-code fade-in">
+            <!-- QR code will be displayed here -->
+        </div>
+
+        <div class="appointments-section fade-in">
+            <div class="appointments-header">
+                <div class="header-top">
+                    <h2>Calendly Appointments</h2>
+                    <button onclick="downloadAllAppointments()" class="download-all-btn">
+                        📥 Download All
+                    </button>
+                </div>
+                <div class="filters">
+                    <input type="date" id="start-date" class="filter-input" placeholder="Start Date">
+                    <input type="date" id="end-date" class="filter-input" placeholder="End Date">
+                    <select id="status-filter" class="filter-input">
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="canceled">Canceled</option>
+                    </select>
+                    <input type="text" id="search-filter" class="filter-input" placeholder="Search name or email">
+                    <button onclick="applyFilters()" class="filter-button">Apply Filters</button>
+                </div>
+            </div>
+            <div class="appointments-list" id="appointments-list">
+                <!-- Appointments will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let statusCheckInterval;
+        let qrCheckInterval;
+        let isConnected = false;
+        let qrCodeFound = false;
+
+        function updateStatus(connected) {
+            const statusDiv = document.getElementById('status');
+            if (connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.textContent = 'Bot Status: Connected';
+                isConnected = true;
+                clearQRCheck();
+                document.getElementById('qr-code').innerHTML = '';
+                if (statusCheckInterval) {
+                    clearInterval(statusCheckInterval);
+                    statusCheckInterval = null;
+                }
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = 'Bot Status: Disconnected';
+                isConnected = false;
+                if (!qrCheckInterval) startQRCheck();
+                if (!statusCheckInterval) {
+                    statusCheckInterval = setInterval(checkBotStatus, 5000);
+                }
+            }
+        }
+
+        function clearQRCheck() {
+            if (qrCheckInterval) {
+                clearInterval(qrCheckInterval);
+                qrCheckInterval = null;
+            }
+            qrCodeFound = false;
+        }
+
+        function checkBotStatus() {
+            fetch('/bot_status')
+                .then(response => response.json())
+                .then(data => {
+                    updateStatus(data.connected);
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function startQRCheck() {
+            clearQRCheck();
+            checkQRCode();
+            qrCheckInterval = setInterval(checkQRCode, 1000);
+        }
+
+        function checkQRCode() {
+            if (isConnected || qrCodeFound) {
+                clearQRCheck();
+                return;
+            }
+
+            fetch('/qr_code_exists')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.exists) {
+                        document.getElementById('qr-code').innerHTML = 
+                            `<img src="/get_qr_code?${new Date().getTime()}" alt="QR Code">`;
+                        qrCodeFound = true;
+                        clearQRCheck();
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function resetBot() {
+            fetch('/reset_bot')
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data.message);
+                    updateStatus(false);
+                    qrCodeFound = false;
+                    startQRCheck();
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        checkBotStatus();
+        
+        if (!isConnected) {
+            statusCheckInterval = setInterval(checkBotStatus, 5000);
+            startQRCheck();
+        }
+
+        function loadAppointments() {
+            const appointmentsList = document.getElementById('appointments-list');
+            appointmentsList.classList.add('loading');
+            
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            const status = document.getElementById('status-filter').value;
+            const search = document.getElementById('search-filter').value;
+
+            console.log('Loading appointments with filters:', { startDate, endDate, status, search });
+
+            fetch(`/get_appointments?start_date=${startDate}&end_date=${endDate}&status=${status}&search=${search}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(appointments => {
+                    console.log(`Loaded ${appointments.length} appointments`);
+                    appointmentsList.classList.remove('loading');
+                    appointmentsList.innerHTML = '';
+
+                    if (appointments.length === 0) {
+                        appointmentsList.innerHTML = `
+                            <div class="no-appointments">
+                                <p>📅 No appointments found</p>
+                                ${search || startDate || endDate || status ? '<p>Try adjusting your search filters</p>' : ''}
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    appointments.forEach((appointment, index) => {
+                        const card = createAppointmentCard(appointment, index);
+                        appointmentsList.appendChild(card);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading appointments:', error);
+                    appointmentsList.classList.remove('loading');
+                    appointmentsList.innerHTML = `
+                        <div class="no-appointments">
+                            <p>❌ Error loading appointments</p>
+                            <p>Error: ${error.message}</p>
+                            <button onclick="loadAppointments()" class="filter-button">Try Again</button>
+                        </div>
+                    `;
+                });
+        }
+
+        function createAppointmentCard(appointment, index) {
+            const card = document.createElement('div');
+            const status = appointment.status?.toLowerCase() || 'active';
+            card.className = `appointment-card ${status}`;
+            
+            const startTime = new Date(appointment.start_time).toLocaleString();
+            const endTime = new Date(appointment.end_time).toLocaleString();
+
+            card.innerHTML = `
+                <div class="appointment-header">
+                    <span class="appointment-name">🗓️ New Appointment</span>
+                    <div class="appointment-actions">
+                        <span class="appointment-status ${status}">
+                            ${status === 'active' ? '✅' : '❌'} ${status.charAt(0).toUpperCase() + status.slice(1)}
+                        </span>
+                        <button onclick="downloadAppointment(${index})" class="action-button download-btn" title="Download">
+                            📥
+                        </button>
+                        <button onclick="deleteAppointment(${index})" class="action-button delete-btn" title="Delete">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+                <div class="appointment-details">
+                    <div class="appointment-detail">
+                        <span class="detail-label">👤 Invitee Name</span>
+                        <span class="detail-value">${appointment.invitee_name || 'N/A'}</span>
+                    </div>
+                    <div class="appointment-detail">
+                        <span class="detail-label">📧 Email</span>
+                        <span class="detail-value">${appointment.invitee_email || 'N/A'}</span>
+                    </div>
+                    <div class="appointment-detail">
+                        <span class="detail-label">🕒 Start Time</span>
+                        <span class="detail-value">${startTime}</span>
+                    </div>
+                    <div class="appointment-detail">
+                        <span class="detail-label">🕕 End Time</span>
+                        <span class="detail-value">${endTime}</span>
+                    </div>
+                    <div class="appointment-detail">
+                        <span class="detail-label">📝 Event Type</span>
+                        <span class="detail-value">${appointment.event_type || 'N/A'}</span>
+                    </div>
+                    ${appointment.cancel_url ? `
+                    <div class="appointment-detail">
+                        <span class="detail-label">🔗 Cancellation</span>
+                        <a href="${appointment.cancel_url}" target="_blank" class="cancel-link">Cancel Appointment</a>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+            return card;
+        }
+
+        function applyFilters() {
+            loadAppointments();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAppointments();
+            setInterval(loadAppointments, 60000);
+        });
+
+        function startBot() {
+            fetch('/start_bot')
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data.message);
+                    updateStatus(false);
+                    qrCodeFound = false;
+                    startQRCheck();
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function deleteAppointment(index) {
+            if (!confirm('Are you sure you want to delete this appointment?')) {
+                return;
+            }
+
+            fetch(`/delete_appointment/${index}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadAppointments(); // Refresh the list
+                    alert('Appointment deleted successfully');
+                } else {
+                    alert('Error deleting appointment: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error deleting appointment');
+            });
+        }
+
+        function downloadAppointment(index) {
+            window.location.href = `/download_appointment/${index}`;
+        }
+
+        function downloadAllAppointments() {
+            fetch('/download_all_appointments')
+                .then(response => {
+                    if (!response.ok) {
+                        if (response.status === 404) {
+                            throw new Error('No appointments to download');
+                        }
+                        throw new Error('Failed to download appointments');
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `all_appointments_${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert(error.message);
+                });
+        }
+    </script>
+</body>
+</html>

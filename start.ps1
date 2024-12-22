@@ -1,0 +1,1 @@
+& "$PSScriptRoot\start.bat"
