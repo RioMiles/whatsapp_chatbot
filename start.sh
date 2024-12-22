@@ -24,6 +24,12 @@ npm install
 echo "Installing Python packages..."
 pip3 install -r requirements.txt
 
+# Ensure waitress is installed
+if ! python3 -c "import waitress" &> /dev/null; then
+    echo "Installing waitress..."
+    pip3 install waitress
+fi
+
 # Set environment variables
 export FLASK_ENV=production
 export FLASK_APP=dashboard.py
