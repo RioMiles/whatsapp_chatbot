@@ -85,7 +85,7 @@ client.on('ready', async () => {
         isCheckingMessages = true;
     }
 
-    fetch('http://0.0.0.0:0/set_bot_connected', {
+    fetch('http://0.0.0.0:8080/set_bot_connected', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -181,7 +181,7 @@ client.on('disconnected', (reason) => {
         }
     }
     
-    fetch('http://0.0.0.0:0/set_bot_disconnected', {
+    fetch('http://0.0.0.0:8080/set_bot_disconnected', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
