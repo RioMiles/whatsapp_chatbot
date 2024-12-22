@@ -80,7 +80,7 @@
 #!/bin/bash
 
 # Create a new directory for this instance if it doesn't exist
-NEW_PORT=8081  # Change this to your desired port
+NEW_PORT=8080  # Change this to your desired port
 INSTANCE_DIR="instance_${NEW_PORT}"
 
 if [ ! -d "$INSTANCE_DIR" ]; then
