@@ -1,0 +1,14 @@
+# Ignore all files in the .env directory
+.env/
+#ignore node modules
+node_modules/
+#ignore .webjs_cache
+.webjs_cache/
+#ignore .webjs_auth
+.webjs_auth/
+#ignore .webjs_sessions
+.webjs_sessions/
+#ignore .webjs_sessions
+.webjs_sessions/
+#ignore pycache
+__pycache__/

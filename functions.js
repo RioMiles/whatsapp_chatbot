@@ -18,6 +18,8 @@ const userProcessingTimers = {};
 const IGNORE_LIST_FILE = path.join(__dirname, 'ignore_list.json');
 const ignoreList = new Set();
 
+const activeThreads = new Set();
+
 function saveIgnoreList() {
     const ignoreArray = Array.from(ignoreList);
     fs.writeFileSync(IGNORE_LIST_FILE, JSON.stringify(ignoreArray, null, 2), 'utf8');
@@ -103,6 +105,7 @@ function clearAllThreads() {
         for (let user in userThreads) {
             delete userThreads[user];
         }
+        activeThreads.clear();
     } catch (error) {
         console.error(`Error in clearAllThreads: ${error.message}`);
     }
@@ -110,7 +113,10 @@ function clearAllThreads() {
 
 async function generateResponseOpenAI(assistant, senderNumber, userMessage, assistantKey, client) {
     try {
-        if (!userMessage) {
+        // Extract the actual message content
+        const messageContent = typeof userMessage === 'object' ? userMessage.content : userMessage;
+
+        if (!messageContent) {
             throw new Error('Empty message received.');
         }
 
@@ -125,7 +131,7 @@ async function generateResponseOpenAI(assistant, senderNumber, userMessage, assi
 
         await assistant.beta.threads.messages.create(threadId, {
             role: 'user',
-            content: userMessage
+            content: messageContent
         });
 
         const tools = [{
@@ -205,7 +211,10 @@ async function generateResponseOpenAI(assistant, senderNumber, userMessage, assi
                     });
                 }
             } else if (runStatus.status === 'failed') {
-                throw new Error('Run failed');
+                console.error('Run failed with error:', runStatus.last_error);
+                throw new Error(`Run failed: ${runStatus.last_error?.message || 'Unknown error'}`);
+            } else if (runStatus.status === 'expired') {
+                throw new Error('Run expired');
             }
 
             await sleep(1000);
@@ -226,7 +235,7 @@ async function generateResponseOpenAI(assistant, senderNumber, userMessage, assi
         return response.trim() || "I'm sorry, I couldn't generate a response.";
     } catch (error) {
         console.error(`Error in generateResponseOpenAI: ${error.message}`);
-        return "Sorry, something went wrong while processing your request.";
+        throw error; // Let the caller handle the error
     }
 }
 
@@ -408,7 +417,7 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                         if (!isAdmin && !isModerator) {
                             return "You don't have permission to use this command.";
                         }
-                        
+
                         try {
                             const quotedStrings = extractMultipleQuotedStrings(args.join(' '));
                             if (quotedStrings.length !== 2) {
@@ -416,13 +425,13 @@ async function handleCommand(client, assistantOrOpenAI, message, senderNumber, i
                             }
 
                             const [recipientNumber, responseMessage] = quotedStrings;
-                            
+
                             if (!recipientNumber.match(/^\d+$/)) {
                                 return 'Invalid phone number format. Please provide only numbers without any special characters.';
                             }
 
                             await sendMessageWithValidation(client, recipientNumber, responseMessage, senderNumber);
-                            
+
                             return `Response sent to ${recipientNumber}`;
                         } catch (error) {
                             console.error('Error in respond command:', error);
@@ -502,43 +511,6 @@ function showMenu(isAdmin, isModerator) {
     }
 }
 
-const messageQueues = {};
-const processingStatus = {};
-
-async function queueMessage(client, assistantOrOpenAI, senderNumber, message) {
-    if (!messageQueues[senderNumber]) {
-        messageQueues[senderNumber] = [];
-    }
-
-    messageQueues[senderNumber].push(message);
-
-    if (!processingStatus[senderNumber]) {
-        await processMessageQueue(client, assistantOrOpenAI, senderNumber);
-    }
-}
-
-async function processMessageQueue(client, assistantOrOpenAI, senderNumber) {
-    if (processingStatus[senderNumber] || !messageQueues[senderNumber]?.length) {
-        return;
-    }
-
-    processingStatus[senderNumber] = true;
-
-    try {
-        while (messageQueues[senderNumber].length > 0) {
-            const message = messageQueues[senderNumber][0];
-            await processUserMessages(client, assistantOrOpenAI, senderNumber, message);
-            messageQueues[senderNumber].shift();
-            
-            await sleep(1000);
-        }
-    } catch (error) {
-        console.error(`Error processing message queue for ${senderNumber}:`, error);
-    } finally {
-        processingStatus[senderNumber] = false;
-    }
-}
-
 async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message) {
     if (senderNumber === client.info.wid.user) {
         return null;
@@ -548,117 +520,219 @@ async function storeUserMessage(client, assistantOrOpenAI, senderNumber, message
         return null;
     }
 
-    let messageToStore = '';
-
     try {
         if (message.type === 'ptt' || message.type === 'audio') {
             const media = await message.downloadMedia();
             const audioBuffer = Buffer.from(media.data, 'base64');
             const transcription = await transcribeAudio(assistantOrOpenAI, audioBuffer);
-            messageToStore = `Transcribed voice message: ${transcription}`;
+            return await processUserMessages(client, assistantOrOpenAI, senderNumber, {
+                type: 'voice',
+                content: `Transcribed voice message: ${transcription}`,
+                originalMessage: message
+            });
         } else if (message.type === 'document') {
-            return "As a vision model, I can only process images at the moment. Please send your document as an image if possible.";
+            return message.reply("As a vision model, I can only process images at the moment. Please send your document as an image if possible.");
         } else if (message.type === 'image') {
             const media = await message.downloadMedia();
-            
+
             const fileSizeInMB = Buffer.from(media.data, 'base64').length / (1024 * 1024);
             if (fileSizeInMB > 10) {
-                return "The image is too large to process. Please send an image smaller than 10MB.";
+                return message.reply("The image is too large to process. Please send an image smaller than 10MB.");
             }
 
             const supportedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-
             if (!supportedTypes.includes(media.mimetype)) {
-                return "Please send images in JPEG, PNG, GIF, or WEBP format.";
+                return message.reply("Please send images in JPEG, PNG, GIF, or WEBP format.");
             }
 
-            const response = await processImageOrDocument(assistantOrOpenAI, media, message.body);
-            return response;
+            return await processUserMessages(client, assistantOrOpenAI, senderNumber, {
+                type: 'image',
+                media: media,
+                caption: message.body,
+                originalMessage: message
+            });
         } else {
-            messageToStore = message.body || `A message of type ${message.type} was received`;
+            return await processUserMessages(client, assistantOrOpenAI, senderNumber, {
+                type: 'text',
+                content: message.body || `A message of type ${message.type} was received`,
+                originalMessage: message
+            });
         }
-
-        await queueMessage(client, assistantOrOpenAI, senderNumber, messageToStore);
-        return null;
     } catch (error) {
         console.error(`Error processing message: ${error.message}`);
-        return "I encountered an issue processing your message. I can handle images and text messages - please try again!";
-    }
-}
-
-async function processImageOrDocument(assistantOrOpenAI, media, text) {
-    try {
-        if (!media.mimetype.startsWith('image/')) {
-            return "I can only analyze images at the moment.";
-        }
-
-        const base64Data = media.data;
-        const defaultPrompt = "What's in this image?";
-
-        const messages = [
-            {
-                role: "user",
-                content: [
-                    { type: "text", text: text || defaultPrompt },
-                    {
-                        type: "image_url",
-                        image_url: {
-                            url: `data:${media.mimetype};base64,${base64Data}`
-                        }
-                    }
-                ]
-            }
-        ];
-
-        const response = await assistantOrOpenAI.chat.completions.create({
-            model: "gpt-4o",
-            messages: messages,
-            max_tokens: 1000,
-            temperature: 0.7
-        });
-
-        return response.choices[0].message.content;
-    } catch (error) {
-        console.error('Error in processImageOrDocument:', error);
-        return "I can analyze images for you. Please send me an image and I'll describe what I see!";
+        return message.reply("I encountered an issue processing your message. I can handle images and text messages - please try again!");
     }
 }
 
 async function processUserMessages(client, assistantOrOpenAI, senderNumber, message) {
     if (senderNumber === 'status' || !senderNumber) return null;
 
-    const isVoiceMessage = message.startsWith('Transcribed voice message:');
+    // Check if thread is active
+    if (activeThreads.has(senderNumber)) {
+        await message.originalMessage.reply("I'm still processing your previous message. Please wait a moment.");
+        return null;
+    }
 
     try {
-        const response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, message, assistantKey, client);
+        // Mark thread as active
+        activeThreads.add(senderNumber);
 
-        const formattedSender = formatMexicanNumber(senderNumber);
-        const formattedSenderNumber = `${formattedSender}@c.us`;
-        
-        if (!formattedSenderNumber.match(/^\d+@c\.us$/)) {
-            throw new Error(`Invalid sender number format: ${formattedSenderNumber}`);
-        }
-
-        if (isVoiceMessage) {
-            const audioBuffer = await generateAudioResponse(assistantOrOpenAI, response);
-            const media = new MessageMedia('audio/ogg', audioBuffer.toString('base64'), 'response.ogg');
-            await client.sendMessage(formattedSenderNumber, media, { sendAudioAsVoice: true });
+        let response;
+        if (message.type === 'image') {
+            response = await processImageOrDocument(assistantOrOpenAI, message.media, message.caption, senderNumber);
         } else {
-            await client.sendMessage(formattedSenderNumber, response);
+            try {
+                response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, message.content, assistantKey, client);
+            } catch (error) {
+                console.error('Error in generateResponseOpenAI:', error);
+                // If the thread is failing, clear it and try again
+                delete userThreads[senderNumber];
+                response = await generateResponseOpenAI(assistantOrOpenAI, senderNumber, message.content, assistantKey, client);
+            }
+
+            if (message.type === 'voice') {
+                const audioBuffer = await generateAudioResponse(assistantOrOpenAI, response);
+                const media = new MessageMedia('audio/ogg', audioBuffer.toString('base64'), 'response.ogg');
+                await message.originalMessage.reply(media, null, { sendAudioAsVoice: true });
+                return null;
+            }
         }
 
+        // Reply to the original message
+        await message.originalMessage.reply(response);
         return null;
 
     } catch (error) {
         console.error('\x1b[31m%s\x1b[0m', `❌ Error with ${senderNumber}: ${error.message}`);
-        if (error.message.includes('invalid wid')) {
-            console.warn(`Invalid WID error for ${senderNumber}: ${error.message}`);
-        } else {
-            const errorResponse = "Sorry, an error occurred while processing your messages.";
-            const formattedSender = formatMexicanNumber(senderNumber);
-            await client.sendMessage(`${formattedSender}@c.us`, errorResponse);
-            return null;
+        const errorResponse = "I encountered an unexpected error. Let me start a fresh conversation.";
+        await message.originalMessage.reply(errorResponse);
+        // Clear the thread to start fresh
+        delete userThreads[senderNumber];
+        return null;
+    } finally {
+        // Always remove from active threads when done
+        activeThreads.delete(senderNumber);
+    }
+}
+
+async function processImageOrDocument(assistantOrOpenAI, media, text, senderNumber) {
+    try {
+        if (!media.mimetype.startsWith('image/')) {
+            return "I can only analyze images at the moment.";
         }
+
+        let threadId;
+        if (userThreads[senderNumber]) {
+            threadId = userThreads[senderNumber];
+        } else {
+            const chat = await assistantOrOpenAI.beta.threads.create();
+            threadId = chat.id;
+            userThreads[senderNumber] = threadId;
+        }
+
+        const base64Data = media.data;
+        const defaultPrompt = "What's in this image?";
+
+        // Create a temporary file
+        const tempFilePath = path.join(__dirname, `temp_${Date.now()}.${media.mimetype.split('/')[1]}`);
+
+        try {
+            // Write the buffer to a temporary file
+            fs.writeFileSync(tempFilePath, Buffer.from(base64Data, 'base64'));
+
+            // Create a ReadStream for the file
+            const fileStream = fs.createReadStream(tempFilePath);
+
+            // Upload the file to OpenAI
+            const uploadResponse = await assistantOrOpenAI.files.create({
+                file: fileStream,
+                purpose: 'assistants'
+            });
+
+            // Wait for file to be fully processed
+            let fileStatus;
+            do {
+                await sleep(1000);
+                fileStatus = await assistantOrOpenAI.files.retrieve(uploadResponse.id);
+            } while (fileStatus.status === 'processing');
+
+            if (fileStatus.status !== 'processed') {
+                throw new Error('File processing failed');
+            }
+
+            // Create message with the uploaded file
+            await assistantOrOpenAI.beta.threads.messages.create(threadId, {
+                role: 'user',
+                content: [
+                    {
+                        type: "text",
+                        text: text || defaultPrompt
+                    },
+                    {
+                        type: "image_file",
+                        image_file: {
+                            file_id: uploadResponse.id
+                        }
+                    }
+                ]
+            });
+
+            // Create and wait for run
+            const run = await assistantOrOpenAI.beta.threads.runs.create(threadId, {
+                assistant_id: assistantKey
+            });
+
+            // Poll run status with timeout
+            let runStatus;
+            let attempts = 0;
+            const maxAttempts = 30; // 30 seconds timeout
+
+            while (attempts < maxAttempts) {
+                runStatus = await assistantOrOpenAI.beta.threads.runs.retrieve(threadId, run.id);
+
+                if (runStatus.status === 'completed') {
+                    break;
+                }
+
+                if (runStatus.status === 'failed' || runStatus.status === 'expired') {
+                    throw new Error(`Run ${runStatus.status}: ${runStatus.last_error?.message || 'Unknown error'}`);
+                }
+
+                await sleep(1000);
+                attempts++;
+            }
+
+            if (attempts >= maxAttempts) {
+                throw new Error('Run timed out');
+            }
+
+            // Get the response
+            const messages = await assistantOrOpenAI.beta.threads.messages.list(threadId);
+            const latestMessage = messages.data[0];
+
+            let response = '';
+            if (latestMessage.content && latestMessage.content.length > 0) {
+                for (const content of latestMessage.content) {
+                    if (content.type === 'text') {
+                        response += content.text.value.trim() + ' ';
+                    }
+                }
+            }
+
+            return response.trim() || "I'm sorry, I couldn't analyze the image properly.";
+        } finally {
+            // Clean up
+            try {
+                if (fs.existsSync(tempFilePath)) {
+                    fs.unlinkSync(tempFilePath);
+                }
+            } catch (cleanupError) {
+                console.error('Error cleaning up temporary file:', cleanupError);
+            }
+        }
+    } catch (error) {
+        console.error('Error in processImageOrDocument:', error);
+        return "I encountered an error while analyzing the image. Please try again!";
     }
 }
 
@@ -706,7 +780,7 @@ async function handleHumanRequest(senderNumber, client, adminNumbers) {
         }
 
         const timestamp = new Date().toLocaleString();
-        
+
         const notificationMessage = `
 🔔 *Human Representative Request*
 ---------------------------
@@ -715,10 +789,10 @@ Time: ${timestamp}
 Status: Awaiting response
 ---------------------------
 To respond, use: !!respond "${senderNumber}" "your message"`;
-        
+
         let notifiedAdmins = 0;
         let failedNotifications = [];
-        
+
         for (const adminNumber of adminNumbers) {
             try {
                 const formattedAdminNumber = `${adminNumber}@c.us`;
@@ -734,7 +808,7 @@ To respond, use: !!respond "${senderNumber}" "your message"`;
             console.error('Failed to notify any admins about human request');
             throw new Error('Failed to reach customer service team');
         }
-        
+
         return `I've forwarded your request to our customer service team. A human representative will contact you shortly. Your request has been logged at ${timestamp}. Thank you for your patience.`;
     } catch (error) {
         console.error('Error in handleHumanRequest:', error);
@@ -762,7 +836,5 @@ module.exports = {
     addToIgnoreList,
     removeFromIgnoreList,
     handleHumanRequest,
-    queueMessage,
-    processMessageQueue,
     sendMessageWithValidation,
 };

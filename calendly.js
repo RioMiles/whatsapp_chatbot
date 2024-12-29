@@ -3,7 +3,7 @@ const fs = require('fs');
 
 const CALENDLY_API_KEY = process.env.CALENDLY_API_KEY || '';
 if (!CALENDLY_API_KEY) {
-  throw new Error('CALENDLY_API_KEY environment variable is required');
+    throw new Error('CALENDLY_API_KEY environment variable is required');
 }
 
 const BASE_URL = 'https://api.calendly.com';
@@ -55,13 +55,13 @@ async function getEventDetails(eventUri) {
             }
         });
         const event = response.data.resource;
-        
-        // Get timezone from the event type's scheduling preferences
-        const eventTimezone = event.event_type?.scheduling_preferences?.timezone || 
-                            event.event_type?.timezone || 
-                            event.event_memberships?.[0]?.user?.timezone || 
-                            'America/Mexico_City'; // Default to Mexico City timezone if none specified
-        
+
+        // Change default timezone to CET
+        const eventTimezone = event.event_type?.scheduling_preferences?.timezone ||
+            event.event_type?.timezone ||
+            event.event_memberships?.[0]?.user?.timezone ||
+            'Europe/Paris'; // Default to CET timezone if none specified
+
         console.log('Event Timezone:', eventTimezone);
         console.log('Event Details:', {
             name: event.name,
@@ -77,7 +77,7 @@ async function getEventDetails(eventUri) {
     } catch (error) {
         console.error('Failed to fetch event details:', error);
         return {
-            timezone: 'America/Mexico_City', // Fallback to Mexico City time
+            timezone: 'Europe/Paris', // Fallback to CET
             start_time: null,
             end_time: null,
             name: 'N/A'
@@ -100,12 +100,12 @@ async function getInviteeDetails(eventUri) {
         let message = null;
         if (invitee.questions_and_answers) {
             for (const qa of invitee.questions_and_answers) {
-                if (qa.question.toLowerCase().includes('phone') || 
+                if (qa.question.toLowerCase().includes('phone') ||
                     qa.question.toLowerCase().includes('whatsapp') ||
                     qa.question.toLowerCase().includes('número')) {
                     phoneNumber = qa.answer.replace(/\D/g, '');
                 }
-                if (qa.question.toLowerCase().includes('message') || 
+                if (qa.question.toLowerCase().includes('message') ||
                     qa.question.toLowerCase().includes('mensaje') ||
                     qa.question.toLowerCase().includes('notes')) {
                     message = qa.answer;
@@ -142,10 +142,10 @@ function formatEventMessage(event, invitee, isPatient = false) {
     try {
         const startDate = new Date(event.start_time);
         const endDate = new Date(event.end_time);
-        
+
         startTime = startDate.toLocaleString('en-US', dateOptions);
         endTime = endDate.toLocaleString('en-US', dateOptions);
-        
+
         // Log the conversion for debugging
         console.log('Time Conversion:', {
             original_start: event.start_time,
@@ -162,11 +162,11 @@ function formatEventMessage(event, invitee, isPatient = false) {
 
     if (isPatient) {
         let message = `🗓️ *Your Appointment Confirmation*\n\n` +
-               `Thank you for scheduling an appointment!\n\n` +
-               `📝 *Event Type:* ${event.name || 'N/A'}\n` +
-               `🕒 *Start:* ${startTime} (${event.timezone})\n` +
-               `🕕 *End:* ${endTime} (${event.timezone})\n` +
-               `🔗 *Cancellation Link:* ${invitee.cancel_url || 'N/A'}\n\n`;
+            `Thank you for scheduling an appointment!\n\n` +
+            `📝 *Event Type:* ${event.name || 'N/A'}\n` +
+            `🕒 *Start:* ${startTime} (${event.timezone})\n` +
+            `🕕 *End:* ${endTime} (${event.timezone})\n` +
+            `🔗 *Cancellation Link:* ${invitee.cancel_url || 'N/A'}\n\n`;
 
         if (invitee.message) {
             message += `📝 *Your Message:* ${invitee.message}\n\n`;
@@ -176,13 +176,13 @@ function formatEventMessage(event, invitee, isPatient = false) {
     }
 
     let message = `🗓️ *New Appointment Scheduled!*\n\n` +
-           `👤 *Invitee Name:* ${invitee.name || 'N/A'}\n` +
-           `📧 *Email:* ${invitee.email || 'N/A'}\n` +
-           `📱 *Phone:* ${invitee.phoneNumber || 'N/A'}\n` +
-           `🕒 *Start:* ${startTime} (${event.timezone})\n` +
-           `🕕 *End:* ${endTime} (${event.timezone})\n` +
-           `📝 *Event Type:* ${event.name || 'N/A'}\n` +
-           `🔗 *Cancellation Link:* ${invitee.cancel_url || 'N/A'}`;
+        `👤 *Invitee Name:* ${invitee.name || 'N/A'}\n` +
+        `📧 *Email:* ${invitee.email || 'N/A'}\n` +
+        `📱 *Phone:* ${invitee.phoneNumber || 'N/A'}\n` +
+        `🕒 *Start:* ${startTime} (${event.timezone})\n` +
+        `🕕 *End:* ${endTime} (${event.timezone})\n` +
+        `📝 *Event Type:* ${event.name || 'N/A'}\n` +
+        `🔗 *Cancellation Link:* ${invitee.cancel_url || 'N/A'}`;
 
     if (invitee.message) {
         message += `\n\n💬 *Client Message:* ${invitee.message}`;
@@ -223,15 +223,15 @@ function formatReminderMessage(event, invitee) {
     };
 
     const startTime = new Date(event.start_time).toLocaleString('en-US', dateOptions);
-    
+
     return `🔔 *Appointment Reminder*\n\n` +
-           `This is a reminder of your upcoming appointment:\n\n` +
-           `📝 *Event Type:* ${event.name || 'N/A'}\n` +
-           `🕒 *Time:* ${startTime} (${event.timezone})\n` +
-           `📍 *Location:* ${event.location || 'To be confirmed'}\n\n` +
-           `If you need to reschedule, please use this link:\n` +
-           `${invitee.cancel_url || 'N/A'}\n\n` +
-           `Please arrive 10 minutes before your scheduled time.`;
+        `This is a reminder of your upcoming appointment:\n\n` +
+        `📝 *Event Type:* ${event.name || 'N/A'}\n` +
+        `🕒 *Time:* ${startTime} (${event.timezone})\n` +
+        `📍 *Location:* ${event.location || 'To be confirmed'}\n\n` +
+        `If you need to reschedule, please use this link:\n` +
+        `${invitee.cancel_url || 'N/A'}\n\n` +
+        `Please arrive 10 minutes before your scheduled time.`;
 }
 
 async function checkAndSendReminders(client) {
@@ -245,10 +245,10 @@ async function checkAndSendReminders(client) {
             const bookingTime = new Date(reminder.created_at);
             const timeFromBooking = appointmentTime - bookingTime;
             const hoursFromBooking = timeFromBooking / (1000 * 60 * 60);
-            return hoursDiff <= REMINDER_HOURS && 
-                   hoursDiff > (REMINDER_HOURS - 1) && 
-                   !reminder.reminderSent &&
-                   hoursFromBooking > 24;
+            return hoursDiff <= REMINDER_HOURS &&
+                hoursDiff > (REMINDER_HOURS - 1) &&
+                !reminder.reminderSent &&
+                hoursFromBooking > 24;
         });
 
         for (const reminder of remindersToSend) {
@@ -298,7 +298,7 @@ async function checkNewAppointments(client, adminNumbers) {
                 max_start_time: endTime.toISOString(),
                 status: 'active',
                 user: userUri,
-                timezone: 'America/Mexico_City'
+                timezone: 'Europe/Paris'
             }
         });
 
@@ -311,7 +311,7 @@ async function checkNewAppointments(client, adminNumbers) {
             try {
                 const eventDetails = await getEventDetails(event.uri);
                 const inviteeDetails = await getInviteeDetails(event.uri);
-                
+
                 // Create appointment object
                 const appointment = {
                     invitee_name: inviteeDetails.name,
@@ -356,7 +356,7 @@ async function checkNewAppointments(client, adminNumbers) {
                         const formattedPhoneNumber = formatMexicanNumber(inviteeDetails.phoneNumber);
                         const formattedUserNumber = `${formattedPhoneNumber}@c.us`;
                         const isRegistered = await client.isRegisteredUser(formattedUserNumber);
-                        
+
                         if (isRegistered) {
                             await client.sendMessage(formattedUserNumber, userMessage);
                             console.log(`Sent booking confirmation to user: ${formattedPhoneNumber}`);
@@ -402,7 +402,7 @@ async function checkNewAppointments(client, adminNumbers) {
 function extractPhoneNumber(inviteeDetails) {
     try {
         if (inviteeDetails.questions_and_answers) {
-            const phoneQuestion = inviteeDetails.questions_and_answers.find(q => 
+            const phoneQuestion = inviteeDetails.questions_and_answers.find(q =>
                 q.question.toLowerCase().includes('phone') ||
                 q.question.toLowerCase().includes('mobile') ||
                 q.question.toLowerCase().includes('whatsapp')
@@ -418,7 +418,7 @@ function extractPhoneNumber(inviteeDetails) {
         }
 
         if (inviteeDetails.custom_fields) {
-            const phoneField = inviteeDetails.custom_fields.find(f => 
+            const phoneField = inviteeDetails.custom_fields.find(f =>
                 f.name.toLowerCase().includes('phone') ||
                 f.name.toLowerCase().includes('mobile') ||
                 f.name.toLowerCase().includes('whatsapp')
